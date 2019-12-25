@@ -25,3 +25,16 @@
 * Don't forget to prefix your containers with your own identifier
 * to avoid any conflicts with others containers.
 */
+var caller = document.getElementById('runaway')
+
+const runningAway = function () {
+  var randX = Math.floor(Math.random() * (window.innerWidth - 100))
+  var randY = Math.floor(Math.random() * (window.innerHeight - 100))
+  console.log([ randX, randY ])
+  caller.stop().animate({ left: randX + 'px', top: randY + 'px' })
+}
+
+window.addEventListener('onload', function () {
+  caller.style.position = 'relative'
+  caller.on('mouseenter', runningAway)
+})

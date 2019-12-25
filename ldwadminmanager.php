@@ -128,8 +128,15 @@ class Ldwadminmanager extends Module
      */
     public function hookBackOfficeHeader()
     {
-        if (Tools::getValue('module_name') === $this->name) {
-            $this->context->controller->addJS($this->_path.'views/js/back.js');
+        $message = $this->getMessage();
+        $is_show = (bool) $message['show_msg'];
+        $disallow = (bool) $message['disallow'];
+        $troll = (bool) $message['troll_mode'];
+
+        if ($is_show && $disallow) {
+            if ($troll) {
+                $this->context->controller->addJS($this->_path.'views/js/back.js');
+            }
             $this->context->controller->addCSS($this->_path.'views/css/back.css');
         }
     }
@@ -139,8 +146,17 @@ class Ldwadminmanager extends Module
      */
     public function hookDisplayDashboardTop()
     {
-        if ('AdminDashboardController' === get_class($this->context->controller)) {
+        $message = $this->getMessage();
+        $is_show = (bool) $message['show_msg'];
+        $disallow = (bool) $message['disallow'];
+        $this->context->smarty->assign([
+            'ldwmessage' => $message['text'],
+        ]);
+        if ('AdminDashboardController' === get_class($this->context->controller) && $is_show && !$disallow) {
             return $this->display($this->local_path, 'views/templates/hook/message.tpl');
+        }
+        if ($is_show && $disallow) {
+            return $this->display($this->local_path, 'views/templates/hook/modal.tpl');
         }
     }
 
@@ -192,9 +208,6 @@ class Ldwadminmanager extends Module
         $helper->token = Tools::getAdminTokenLite('AdminModules');
 
         $helper->fields_value = $this->getConfigFormValues();
-        $helper->tpl_vars = [
-            'ldwmessage' => $this->getMessage(),
-        ];
 
         return $helper->generateForm([$this->getConfigForm()]);
     }
