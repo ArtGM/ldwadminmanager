@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<module>
+    <name>ldwadminmanager</name>
+    <displayName><![CDATA[LDW Admin manager]]></displayName>
+    <version><![CDATA[1.0.0]]></version>
+    <description><![CDATA[Gestion des permissions]]></description>
+    <author><![CDATA[Lamour du web]]></author>
+    <tab><![CDATA[administration]]></tab>
+    <is_configurable>1</is_configurable>
+    <need_instance>0</need_instance>
+	<limited_countries></limited_countries>
+</module>
