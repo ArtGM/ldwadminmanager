@@ -24,53 +24,58 @@
 *  International Registered Trademark & Property of PrestaShop SA
 */
 
-class ldwadminmanagerClass extends ObjectModel {
+class ldwadminmanagerClass extends ObjectModel
+{
+    /** @var int $id_info - the ID of CustomText */
+    public $id_ldwadminmanager;
 
-	/** @var int $id_info - the ID of CustomText */
-	public $id_ldwadminmanager;
+    /** @var string $text - HTML format of CustomText values */
+    public $text;
 
-	/** @var String $text - HTML format of CustomText values */
-	public $text;
+    /**
+     * @see ObjectModel::$definition
+     */
+    public static $definition = [
+        'table' => 'ldwadminmanager',
+        'primary' => 'id_ldwadminmanager',
+        'fields' => [
+            'id_ldwadminmanager' => [
+                'type' => self::TYPE_NOTHING,
+                'validate' => 'isUnsignedId',
+            ],
+            'text' => [
+                'type' => self::TYPE_HTML,
+                'validate' => 'isCleanHtml',
+                'required' => true,
+            ],
+            'show_msg' => [
+                'type' => self::TYPE_BOOL, 'validate' => 'isBool', 'required' => true,		],
+            'disallow' => [
+                'type' => self::TYPE_BOOL, 'validate' => 'isBool', 'required' => true,		],
+            'troll_mode' => [
+                'type' => self::TYPE_BOOL, 'validate' => 'isBool', 'required' => true,		],
+        ],
+    ];
 
-	/**
-	 * @see ObjectModel::$definition
-	 */
-	public static $definition = array(
-		'table'   => 'ldwadminmanager',
-		'primary' => 'id_ldwadminmanager',
-		'fields'  => array(
-			'id_ldwadminmanager' => array(
-				'type'     => self::TYPE_NOTHING,
-				'validate' => 'isUnsignedId',
-			),
-			// Lang fields.
-			'text'               => array(
-				'type'     => self::TYPE_HTML,
-				'lang'     => true,
-				'validate' => 'isCleanHtml',
-				'required' => true,
-			),
-		),
-	);
+    public static function getldwadminmanagerClassId()
+    {
+        $sql = 'SELECT `id_ldwadminmanager` FROM `'._DB_PREFIX_.'ldwadminmanager`';
 
-	public static function getldwadminmanagerClassId() {
-		$sql = 'SELECT `id_ldwadminmanager` FROM `' . _DB_PREFIX_ . 'ldwadminmanager`';
+        if ($result = Db::getInstance()->executeS($sql)) {
+            return (int) reset($result)['id_ldwadminmanager'];
+        }
 
-		if ( $result = Db::getInstance()->executeS( $sql ) ) {
-			return (int) reset( $result )['id_ldwadminmanager'];
-		}
+        return false;
+    }
 
-		return false;
-  }
-  
-  public function getProfileByName($name)
-  {
-    $sql = 'SELECT `id_profile` FROM `' . _DB_PREFIX_ . 'profile_lang` WHERE `name` = ' . $name;
+    public function getProfileByName($name)
+    {
+        $sql = 'SELECT `id_profile` FROM `'._DB_PREFIX_.'profile_lang` WHERE `name` = '.$name;
 
-		if ( $result = Db::getInstance()->executeS( $sql ) ) {
-			return reset( $result )['id_profile'];
-		}
+        if ($result = Db::getInstance()->executeS($sql)) {
+            return reset($result)['id_profile'];
+        }
 
-		return false;
-  }
+        return false;
+    }
 }

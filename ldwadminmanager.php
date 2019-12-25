@@ -34,7 +34,7 @@ require_once _PS_MODULE_DIR_.'ldwadminmanager/classes/ldwadminmanagerClass.php';
 
 class Ldwadminmanager extends Module
 {
-    protected $config_form = false;
+    private $templateFile;
 
     public function __construct()
     {
@@ -51,7 +51,7 @@ class Ldwadminmanager extends Module
 
         $this->displayName = $this->l('LDW Admin manager');
         $this->description = $this->l('Gestion des permissions');
-
+        $this->templateFile = 'module:ldwadminmanager\views\templates\hook\message.tpl';
         $this->ps_versions_compliancy = [
             'min' => '1.7',
             'max' => _PS_VERSION_,
@@ -64,6 +64,8 @@ class Ldwadminmanager extends Module
      */
     public function install()
     {
+        Configuration::updateValue('text', Tools::getValue('text'));
+
         return parent::install() &&
         $this->install_db() &&
         $this->createNewProfile() &&
@@ -79,7 +81,7 @@ class Ldwadminmanager extends Module
      */
     public function uninstall()
     {
-        Configuration::deleteByName('LDWADMINMANAGER_NOTIFICATION');
+        Configuration::deleteByName('text');
         // Configuration::deleteByName( 'LDWADMINMANAGER_PERMISSIONS' );
         return parent::uninstall() &&
         $this->uninstall_db();
@@ -93,7 +95,7 @@ class Ldwadminmanager extends Module
     public function install_db()
     {
         $return = true;
-        $return &= Db::getInstance()->execute('CREATE TABLE IF NOT EXISTS `'._DB_PREFIX_.'ldwadminmanager` (`id_ldwadminmanager` INT UNSIGNED NOT NULL AUTO_INCREMENT, `text` LONGTEXT NOT NULL, `show_msg` BOOL, `disallow` BOOL, `troll_mode` BOOL, PRIMARY KEY (`id_ldwadminmanager`)) ENGINE='._MYSQL_ENGINE_.' DEFAULT CHARSET=utf8;');
+        $return &= Db::getInstance()->execute('CREATE TABLE IF NOT EXISTS `'._DB_PREFIX_.'ldwadminmanager` (`id_ldwadminmanager` INT UNSIGNED NOT NULL AUTO_INCREMENT, `text` LONGTEXT NOT NULL, `show_msg` BOOLEAN, `disallow` BOOLEAN, `troll_mode` BOOLEAN, PRIMARY KEY (`id_ldwadminmanager`)) ENGINE='._MYSQL_ENGINE_.' DEFAULT CHARSET=utf8;');
 
         return $return;
     }
@@ -137,13 +139,6 @@ class Ldwadminmanager extends Module
      */
     public function hookDisplayDashboardTop()
     {
-        $message = $this->getMessage();
-        $this->context->smarty->assign(
-                [
-                    'ldwmessage' => $message['text'],
-                ]
-            );
-
         if ('AdminDashboardController' === get_class($this->context->controller)) {
             return $this->display($this->local_path, 'views/templates/hook/message.tpl');
         }
@@ -167,13 +162,7 @@ class Ldwadminmanager extends Module
         $output = '';
         // If values have been submitted in the form, process.
         if (Tools::isSubmit('submitLdwadminmanagerModule')) {
-            $update = $this->postProcess();
-
-            if (!$update) {
-                $output = '<div class="alert alert-danger conf error">'
-                            .$this->trans('An error occurred on saving.', [], 'Admin.Notifications.Error')
-                            .'</div>';
-            }
+            $this->postProcess();
         }
 
         $this->context->smarty->assign('module_dir', $this->_path);
@@ -203,6 +192,9 @@ class Ldwadminmanager extends Module
         $helper->token = Tools::getAdminTokenLite('AdminModules');
 
         $helper->fields_value = $this->getConfigFormValues();
+        $helper->tpl_vars = [
+            'ldwmessage' => $this->getMessage(),
+        ];
 
         return $helper->generateForm([$this->getConfigForm()]);
     }
@@ -225,23 +217,23 @@ class Ldwadminmanager extends Module
                     'icon' => 'icon-cogs',
                 ],
                 'input' => [
-                    'id_ldwadminmanager' => [
+                    [
                         'type' => 'hidden',
-                        'name' => 'LDWADMINMANAGER_ID',
+                        'name' => 'id_ldwadminmanager',
                     ],
-                    'content' => [
+                    [
                         'type' => 'textarea',
                         'label' => $this->l('Notification de paiement'),
-                        'name' => 'LDWADMINMANAGER_NOTIFICATION',
+                        'name' => 'text',
                         'cols' => 40,
                         'rows' => 20,
                         'class' => 'rte',
                         'autoload_rte' => true,
                     ],
-                    'permissions' => [
+                    [
                         'type' => 'switch',
-                        'label' => 'Bloquer l\'accès',
-                        'name' => 'LDWADMINMANAGER_DISALLOW',
+                        'label' => 'Afficher le message dans le back-office',
+                        'name' => 'show_msg',
                         'is_bool' => true,
                         'values' => [
                             [
@@ -256,10 +248,30 @@ class Ldwadminmanager extends Module
                             ],
                         ],
                     ],
-                    'trollmod' => [
+                    [
+                        'type' => 'switch',
+                        'label' => 'Bloquer l\'accès',
+                        'name' => 'disallow',
+                        'desc' => 'Affiche une popup et empèche l\'utilisation du back-office',
+                        'is_bool' => true,
+                        'values' => [
+                            [
+                                'id' => 'active_on',
+                                'value' => 1,
+                                'label' => $this->getTranslator()->trans('Yes', [], 'Admin.Global'),
+                            ],
+                            [
+                                'id' => 'active_off',
+                                'value' => 0,
+                                'label' => $this->getTranslator()->trans('No', [], 'Admin.Global'),
+                            ],
+                        ],
+                    ],
+                    [
                         'type' => 'switch',
                         'label' => 'Mode TROLL',
-                        'name' => 'TROLL_MODE',
+                        'name' => 'troll_mode',
+                        'desc' => 'c\'est plutôt énervant',
                         'is_bool' => true,
                         'values' => [
                             [
@@ -291,8 +303,11 @@ class Ldwadminmanager extends Module
         $id_ldw = ldwadminmanagerClass::getldwadminmanagerClassId();
         $notification = new ldwadminmanagerClass((int) $id_ldw);
 
-        $fields_value['LDWADMINMANAGER_NOTIFICATION'] = $notification->text;
-        $fields_value['LDWADMINMANAGER_ID'] = $id_ldw;
+        $fields_value['id_ldwadminmanager'] = (int) $id_ldw;
+        $fields_value['text'] = $notification->text;
+        $fields_value['show_msg'] = $notification->show_msg;
+        $fields_value['disallow'] = $notification->disallow;
+        $fields_value['troll_mode'] = $notification->troll_mode;
 
         return $fields_value;
     }
@@ -302,20 +317,28 @@ class Ldwadminmanager extends Module
      */
     protected function postProcess()
     {
-        // $form_values = $this->getConfigFormValues();
-        $text = Tools::getValue('LDWADMINMANAGER_NOTIFICATION');
-        // var_dump( $text );
+        $form_values = [
+            'id_ldwadminmanager' => Tools::getValue('id_ldwadminmanager'),
+            'text' => Tools::getValue('text'),
+            'show_msg' => Tools::getValue('show_msg'),
+            'disallow' => Tools::getValue('disallow'),
+            'troll_mode' => Tools::getValue('troll_mode'), ];
+
         $saved = true;
-        $notification = new ldwadminmanagerClass(Tools::getValue('LDWADMINMANAGER_ID', 1));
-        $notification->text = $text;
-        $saved &= $notification->save();
+        $adminmanager = new ldwadminmanagerClass($form_values['id_ldwadminmanager']);
+        $adminmanager->text = $form_values['text'];
+        $adminmanager->show_msg = $form_values['show_msg'];
+        $adminmanager->disallow = $form_values['disallow'];
+        $adminmanager->troll_mode = $form_values['troll_mode'];
+        $saved &= $adminmanager->save();
 
         return $saved;
+        $this->_clearCache($this->templateFile);
     }
 
     /*
     TODO: creer un controller
-     * Installation du controller dans la backoffice.
+     * Installation du controller dans le backoffice
      *
      * @return bool
      */
