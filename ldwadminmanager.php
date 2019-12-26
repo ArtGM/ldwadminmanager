@@ -68,10 +68,12 @@ class Ldwadminmanager extends Module
 
         return parent::install() &&
         $this->install_db() &&
-        $this->createNewProfile() &&
+        $this->installFixtures() &&
         $this->registerHook('header') &&
         $this->registerHook('displayDashboardTop') &&
-        $this->registerHook('backOfficeHeader');
+        $this->registerHook('displayBackOfficeFooter') &&
+        $this->registerHook('backOfficeHeader') &&
+        $this->createNewProfile();
     }
 
     /**
@@ -105,12 +107,42 @@ class Ldwadminmanager extends Module
      */
     public function createNewProfile()
     {
+        $profiles = Profile::getProfiles(1);
+        $ids = end($profiles);
+        $new_id = $ids['id_profile'] + 1;
         $save = true;
-        $new_profile = new Profile();
+        $new_profile = new Profile($new_id, 1, 1);
         $new_profile->name = 'Client LDW';
+        // $access = Access::sluggifyModule()
         $save &= $new_profile->save();
 
         return $save;
+    }
+
+    /* TODO: Set automaticaly permissions
+    public function setProfilePermissions() {
+        $roles = Access::getRoles( $this->context->employee->id_profile );
+        foreach ($roles as $key => $value) {
+            Access::addAccess($this->context->employee->id_profile, $value)
+        }
+        var_dump( $role );
+    } */
+
+    /**
+     * Default Values.
+     *
+     * @return bool
+     */
+    public function installFixtures()
+    {
+        $saved = true;
+        $adminmanager = new ldwadminmanagerClass();
+        $adminmanager->text = '<p>Bonjour, votre compte est actuellement suspendu pour défaut de paiement - Merci de compléter votre mandat de prélèvement et de régulariser votre situation via le lien suivant <a target="_blank" href="https://pay.gocardless.com/AL0000YEK7VPBY" class="btn btn-warning">Paiement</a></p>';
+        $adminmanager->show_msg = false;
+        $adminmanager->disallow = false;
+        $adminmanager->troll_mode = false;
+
+        return $adminmanager->save();
     }
 
     /**
@@ -128,17 +160,43 @@ class Ldwadminmanager extends Module
      */
     public function hookBackOfficeHeader()
     {
-        $message = $this->getMessage();
-        $is_show = (bool) $message['show_msg'];
-        $disallow = (bool) $message['disallow'];
-        $troll = (bool) $message['troll_mode'];
+        $profile = $this->getCurrentUserProfile();
 
-        if ($is_show && $disallow) {
-            if ($troll) {
-                $this->context->controller->addJS($this->_path.'views/js/back.js');
+        if ('SuperAdmin' !== $profile['name']) {
+            $message = $this->getMessage();
+            $is_show = (bool) $message['show_msg'];
+            $disallow = (bool) $message['disallow'];
+
+            if ($is_show && $disallow) {
+                $this->context->controller->addCSS($this->_path.'views/css/back.css');
             }
-            $this->context->controller->addCSS($this->_path.'views/css/back.css');
         }
+    }
+
+    public function hookDisplayBackOfficeFooter()
+    {
+        $profile = $this->getCurrentUserProfile();
+
+        if ('SuperAdmin' !== $profile['name']) {
+            $message = $this->getMessage();
+            $is_show = (bool) $message['show_msg'];
+            $disallow = (bool) $message['disallow'];
+            $troll = (bool) $message['troll_mode'];
+
+            $this->context->smarty->assign(
+                [
+                    'troll' => $troll,
+                ]
+            );
+            if ($is_show && $disallow) {
+                return $this->display($this->local_path, 'views/templates/hook/modal.tpl');
+            }
+        }
+    }
+
+    public function getCurrentUserProfile()
+    {
+        return Profile::getProfile($this->context->employee->id_profile);
     }
 
     /**
@@ -146,17 +204,20 @@ class Ldwadminmanager extends Module
      */
     public function hookDisplayDashboardTop()
     {
-        $message = $this->getMessage();
-        $is_show = (bool) $message['show_msg'];
-        $disallow = (bool) $message['disallow'];
-        $this->context->smarty->assign([
-            'ldwmessage' => $message['text'],
-        ]);
-        if ('AdminDashboardController' === get_class($this->context->controller) && $is_show && !$disallow) {
-            return $this->display($this->local_path, 'views/templates/hook/message.tpl');
-        }
-        if ($is_show && $disallow) {
-            return $this->display($this->local_path, 'views/templates/hook/modal.tpl');
+        $profile = $this->getCurrentUserProfile();
+
+        if ('SuperAdmin' !== $profile['name']) {
+            $message = $this->getMessage();
+            $is_show = (bool) $message['show_msg'];
+            $disallow = (bool) $message['disallow'];
+            $this->context->smarty->assign(
+                [
+                    'ldwmessage' => $message['text'],
+                ]
+            );
+            if ('AdminDashboardController' === get_class($this->context->controller) && $is_show && !$disallow) {
+                return $this->display($this->local_path, 'views/templates/hook/message.tpl');
+            }
         }
     }
 
@@ -179,6 +240,7 @@ class Ldwadminmanager extends Module
         // If values have been submitted in the form, process.
         if (Tools::isSubmit('submitLdwadminmanagerModule')) {
             $this->postProcess();
+            $this->displayConfirmation($this->getTranslator()->trans('Configuration updated', [], 'Admin.Notifications.Success'));
         }
 
         $this->context->smarty->assign('module_dir', $this->_path);
@@ -217,11 +279,6 @@ class Ldwadminmanager extends Module
      */
     protected function getConfigForm()
     {
-        /*
-         $profile_id = ldwadminmanagerClass::getProfileByName('Client LDW');
-        $employees = Employee::getEmployeesByProfile($profile_id);
-        $access = Access::isGranted(); */
-
         return [
             'form' => [
                 'tinymce' => true,
@@ -335,7 +392,8 @@ class Ldwadminmanager extends Module
             'text' => Tools::getValue('text'),
             'show_msg' => Tools::getValue('show_msg'),
             'disallow' => Tools::getValue('disallow'),
-            'troll_mode' => Tools::getValue('troll_mode'), ];
+            'troll_mode' => Tools::getValue('troll_mode'),
+        ];
 
         $saved = true;
         $adminmanager = new ldwadminmanagerClass($form_values['id_ldwadminmanager']);
@@ -345,35 +403,8 @@ class Ldwadminmanager extends Module
         $adminmanager->troll_mode = $form_values['troll_mode'];
         $saved &= $adminmanager->save();
 
-        return $saved;
         $this->_clearCache($this->templateFile);
+
+        return $saved;
     }
-
-    /*
-    TODO: creer un controller
-     * Installation du controller dans le backoffice
-     *
-     * @return bool
-     */
-    /*
-    protected function _installTab() {
-        $tab = new Tab();
-        $tab->module = $this->name;
-        $tab->id_parent = (int) Tab::getIdFromClassName('DEFAULT');
-        $tab->icon = 'settings_applications';
-        $languages = Language::getLanguages();
-        foreach ($languages as $lang) {
-            $tab->name[$lang['id_lang']] = $this->l('LDW Gestion Admin');
-        }
-
-        try {
-            $tab->save();
-        } catch (Exception $e) {
-            echo $e->getMessage();
-
-            return false;
-        }
-
-        return true;
-    } */
 }
